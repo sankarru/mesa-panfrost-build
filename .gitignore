@@ -1,0 +1,42 @@
+# Byte-compiled files
+*.o
+*.a
+*.so
+*.so.*
+
+# Build directories
+build/
+builddir/
+_build/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Temporary files
+*.tmp
+*.log
+*.swp
+*~
+
+# Editor files
+.vscode/
+.idea/
+*.sublime-project
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Backup files
+*.backup
+*.bak
+
+# Artifacts (local only)
+artifacts/
+*.tar.gz
+*.zip
+
+# Testing
+test-output/
