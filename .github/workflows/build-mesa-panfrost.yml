@@ -1,0 +1,475 @@
+name: Build Mesa with Panfrost for ARM64
+
+on:
+  workflow_dispatch:
+    inputs:
+      mesa_version:
+        description: 'Mesa version to build (e.g., 26.0.0, 25.3.4)'
+        required: false
+        default: '26.0.0'
+        type: string
+      enable_panfrost:
+        description: 'Build Panfrost driver (requires DRM/KMS)'
+        required: false
+        default: true
+        type: boolean
+      enable_mali_dp:
+        description: 'Build Mali-DP driver (legacy /dev/mali0)'
+        required: false
+        default: true
+        type: boolean
+      enable_panvk:
+        description: 'Build PanVK Vulkan driver (Mali-G72)'
+        required: false
+        default: true
+        type: boolean
+      optimize_level:
+        description: 'Optimization level (2=balanced, 3=maximum)'
+        required: false
+        default: '3'
+        type: choice
+        options:
+          - '2'
+          - '3'
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+
+jobs:
+  build:
+    name: Build Mesa ${{ inputs.mesa_version || '26.0.0' }} for ARM64
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          image: tonistiigi/binfmt:latest
+          platforms: arm64
+
+      - name: Build on ARM64
+        id: build
+        uses: uraimo/run-on-arch-action@v3
+        with:
+          arch: aarch64
+          distro: ubuntu24.04
+          githubToken: ${{ github.token }}
+
+          setup: |
+            mkdir -p "${PWD}/artifacts"
+            mkdir -p "${PWD}/workspace/mesa-build"
+
+          dockerRunArgs: |
+            --volume "${PWD}/artifacts:/artifacts"
+            --volume "${PWD}/workspace/mesa-build:/workspace/mesa-build"
+
+          install: |
+            apt-get update -q -y
+            apt-get install -q -y \
+              git build-essential ninja-build meson python3 python3-pip \
+              python3-mako python3-pil python3-yaml libxcb-dri3-dev \
+              libx11-xcb-dev libxcb-keysyms1-dev libxkbcommon-dev \
+              libxshmfence-dev libdrm-dev libxrandr-dev libxinerama-dev \
+              libxcursor-dev libxfixes-dev libxi-dev libxext-dev \
+              libxv-dev libxvm-dev libgbm-dev libwayland-dev \
+              libegl1-mesa-dev libgles2-mesa-dev libgl1-mesa-dev \
+              libvulkan-dev glslang-tools spirv-tools pkg-config \
+              flex bison libwayland-protocols-dev wayland-protocols \
+              libx11-dev libxext-dev libxxf86vm-dev libxfixes-dev \
+              libxv-dev libxcb-dri2-0-dev libxcb-glx0-dev \
+              libxcb-present-dev libxcb-xfixes0-dev libexpat1-dev \
+              libudev-dev libxml2-dev libssl-dev
+
+            python3 -m pip install mako jinja2 ply pyyaml markdown
+
+          run: |
+            set -e
+
+            MESA_VERSION="${{ inputs.mesa_version || '26.0.0' }}"
+            ENABLE_PANFROST="${{ inputs.enable_panfrost || 'true' }}"
+            ENABLE_MALI_DP="${{ inputs.enable_mali_dp || 'true' }}"
+            ENABLE_PANVK="${{ inputs.enable_panvk || 'true' }}"
+            OPTIMIZE_LEVEL="${{ inputs.optimize_level || '3' }}"
+
+            echo "Building Mesa version: ${MESA_VERSION}"
+            echo "Panfrost: ${ENABLE_PANFROST}"
+            echo "Mali-DP: ${ENABLE_MALI_DP}"
+            echo "PanVK: ${ENABLE_PANVK}"
+            echo "Optimization: -O${OPTIMIZE_LEVEL}"
+
+            cd /tmp
+
+            git clone --depth=1 --branch "mesa-${MESA_VERSION}" https://gitlab.freedesktop.org/mesa/mesa.git
+            cd mesa
+
+            echo "Checking out tag: mesa-${MESA_VERSION}"
+            git fetch --tags
+            git checkout "mesa-${MESA_VERSION}"
+
+            BUILD_DIR="/workspace/mesa-build"
+            ARTIFACT_DIR="/artifacts"
+
+            echo "Build directory: ${BUILD_DIR}"
+            echo "Artifact directory: ${ARTIFACT_DIR}"
+
+            if [ "${ENABLE_PANFROST}" = "true" ]; then
+              GALLIUM_DRIVERS="panfrost,"
+            else
+              GALLIUM_DRIVERS=""
+            fi
+
+            if [ "${ENABLE_MALI_DP}" = "true" ]; then
+              GALLIUM_DRIVERS="${GALLIUM_DRIVERS}swrast,"
+            else
+              GALLIUM_DRIVERS="${GALLIUM_DRIVERS}"
+            fi
+
+            GALLIUM_DRIVERS="${GALLIUM_DRIVERS}zink,llvmpipe"
+
+            if [ "${ENABLE_PANVK}" = "true" ]; then
+              VULKAN_DRIVERS="panvk"
+            else
+              VULKAN_DRIVERS=""
+            fi
+
+            echo "Gallium drivers: ${GALLIUM_DRIVERS}"
+            echo "Vulkan drivers: ${VULKAN_DRIVERS}"
+
+            cat > /tmp/mesa-cross.txt <<'EOF'
+            [binaries]
+            c = 'gcc'
+            cpp = 'g++'
+            ar = 'ar'
+            strip = 'strip'
+            pkg-config = 'pkg-config'
+
+            [properties]
+            skip_introspection_requirements = true
+
+            [host_machine]
+            system = 'linux'
+            cpu_family = 'aarch64'
+            cpu = 'aarch64'
+            endian = 'little'
+            EOF
+
+            meson setup "${BUILD_DIR}" \
+              --prefix=/usr \
+              --sysconfdir=/etc \
+              --libdir=/usr/lib/aarch64-linux-gnu \
+              -Dplatforms=x11,wayland,surfaceless \
+              -Dgallium-drivers=${GALLIUM_DRIVERS%,} \
+              -Dvulkan-drivers=${VULKAN_DRIVERS} \
+              -Degl=enabled \
+              -Dgles2=enabled \
+              -Dgles1=disabled \
+              -Dglx=dri \
+              -Dbuildtype=release \
+              -Doptimization=${OPTIMIZE_LEVEL} \
+              --cross-file /tmp/mesa-cross.txt
+
+            ninja -C "${BUILD_DIR}" -j$(nproc)
+
+            mkdir -p "${ARTIFACT_DIR}/mesa-${MESA_VERSION}-ubuntu24.04-aarch64"
+            DESTDIR="${ARTIFACT_DIR}/mesa-${MESA_VERSION}-ubuntu24.04-aarch64" \
+              ninja -C "${BUILD_DIR}" install
+
+            tar -czf "${ARTIFACT_DIR}/mesa-${MESA_VERSION}-ubuntu24.04-aarch64.tar.gz" \
+              -C "${ARTIFACT_DIR}/mesa-${MESA_VERSION}-ubuntu24.04-aarch64" \
+              usr
+
+            cat > "${ARTIFACT_DIR}/install-mesa.sh" <<'INSTALL_SCRIPT'
+            #!/bin/bash
+            set -e
+
+            echo "=========================================="
+            echo "Mesa Panfrost Installation Script"
+            echo "=========================================="
+            echo ""
+
+            MESA_VERSION="${MESA_VERSION}"
+            INSTALL_DIR="/"
+
+            if [ -z "$1" ]; then
+              echo "Usage: $0 <mesa-tarball> [driver]"
+              echo ""
+              echo "Drivers:"
+              echo "  panfrost - Panfrost driver (requires DRM/KMS)"
+              echo "  mali_dp - Mali-DP driver (legacy /dev/mali0)"
+              echo ""
+              echo "Example: $0 mesa-26.0.0-ubuntu24.04-aarch64.tar.gz panfrost"
+              exit 1
+            fi
+
+            TARBALL="$1"
+            DRIVER="${2:-auto}"
+
+            if [ "$DRIVER" = "auto" ]; then
+              if [ -e /dev/dri/card0 ]; then
+                DRIVER="panfrost"
+                echo "Detected DRM/KMS support, using Panfrost driver"
+              elif [ -e /dev/mali0 ]; then
+                DRIVER="mali_dp"
+                echo "Detected /dev/mali0, using Mali-DP driver"
+              else
+                echo "ERROR: No compatible GPU device found"
+                echo "  /dev/dri/card0 not found (Panfrost requires DRM/KMS)"
+                echo "  /dev/mali0 not found (Mali-DP requires legacy Mali)"
+                exit 1
+              fi
+            fi
+
+            if [ ! -f "$TARBALL" ]; then
+              echo "ERROR: Tarball not found: $TARBALL"
+              exit 1
+            fi
+
+            echo "Installing Mesa ${MESA_VERSION}..."
+            echo "Driver: ${DRIVER}"
+            echo ""
+
+            echo "Creating backup..."
+            mkdir -p /tmp/mesa-backup
+            [ -f /usr/lib/aarch64-linux-gnu/libGL.so.1 ] && \
+              cp /usr/lib/aarch64-linux-gnu/libGL.so.1 /tmp/mesa-backup/
+            [ -f /usr/lib/aarch64-linux-gnu/libEGL.so.1 ] && \
+              cp /usr/lib/aarch64-linux-gnu/libEGL.so.1 /tmp/mesa-backup/
+            [ -f /usr/lib/aarch64-linux-gnu/libGLESv2.so.2 ] && \
+              cp /usr/lib/aarch64-linux-gnu/libGLESv2.so.2 /tmp/mesa-backup/
+
+            echo "Extracting Mesa..."
+            tar -xzf "$TARBALL" -C /
+
+            echo "Running ldconfig..."
+            ldconfig
+
+            case "$DRIVER" in
+              panfrost)
+                echo "Configuring Panfrost driver..."
+                if [ ! -d /etc/environment.d ]; then
+                  mkdir -p /etc/environment.d
+                fi
+                echo 'export MESA_LOADER_DRIVER_OVERRIDE=panfrost' > /etc/environment.d/mesa-driver.conf
+                echo 'export PAN_MESA_DEBUG=gl3' >> /etc/environment.d/mesa-driver.conf
+                ;;
+              mali_dp)
+                echo "Configuring Mali-DP driver..."
+                if [ ! -d /etc/environment.d ]; then
+                  mkdir -p /etc/environment.d
+                fi
+                echo 'export MESA_LOADER_DRIVER_OVERRIDE=mali_dp' > /etc/environment.d/mesa-driver.conf
+                ;;
+              *)
+                echo "No driver configuration for: $DRIVER"
+                ;;
+            esac
+
+            echo ""
+            echo "=========================================="
+            echo "Installation complete!"
+            echo "=========================================="
+            echo ""
+            echo "Driver: ${DRIVER}"
+            echo "Mesa version: ${MESA_VERSION}"
+            echo ""
+            echo "Backup location: /tmp/mesa-backup"
+            echo ""
+            echo "To restore backup, run:"
+            echo "  cp /tmp/mesa-backup/* /usr/lib/aarch64-linux-gnu/"
+            echo "  ldconfig"
+            echo ""
+            echo "To verify installation:"
+            echo "  export DISPLAY=:0"
+            echo "  glxinfo | grep -i 'OpenGL renderer'"
+            echo ""
+            echo "To test performance:"
+            echo "  glmark2"
+            echo ""
+            INSTALL_SCRIPT
+
+            chmod +x "${ARTIFACT_DIR}/install-mesa.sh"
+
+            cat > "${ARTIFACT_DIR}/verify.sh" <<'VERIFY_SCRIPT'
+            #!/bin/bash
+            set -e
+
+            echo "=========================================="
+            echo "Mesa Verification Script"
+            echo "=========================================="
+            echo ""
+
+            if command -v glxinfo &> /dev/null; then
+              echo "Checking OpenGL renderer..."
+              RENDERER=$(glxinfo 2>/dev/null | grep "OpenGL renderer string" | head -1 || echo "Not available")
+              echo "  $RENDERER"
+              echo ""
+
+              if echo "$RENDERER" | grep -qi "llvmpipe"; then
+                echo "WARNING: Software rendering (llvmpipe) is active!"
+                echo "GPU acceleration is NOT working."
+                echo ""
+              elif echo "$RENDERER" | grep -qi "panfrost\|mali"; then
+                echo "SUCCESS: Hardware acceleration is active!"
+                echo ""
+              else
+                echo "Unknown renderer. Check configuration."
+                echo ""
+              fi
+            else
+              echo "glxinfo not installed"
+              echo "Install with: sudo apt install mesa-utils"
+              echo ""
+            fi
+
+            if command -v glmark2 &> /dev/null; then
+              echo "Running glmark2 benchmark..."
+              echo "Testing for 5 seconds..."
+              glmark2 --benchmark all --duration 5 2>&1 | grep -E "FPS|Score" || true
+              echo ""
+            else
+              echo "glmark2 not installed"
+              echo "Install with: sudo apt install glmark2"
+              echo ""
+            fi
+
+            if [ -e /dev/dri ]; then
+              echo "DRM devices found:"
+              ls -la /dev/dri/ 2>/dev/null || echo "  None"
+              echo ""
+            fi
+
+            if [ -e /dev/mali0 ]; then
+              echo "Mali device found:"
+              ls -la /dev/mali0
+              echo ""
+            fi
+
+            echo "Environment variables:"
+            env | grep -i mesa || echo "  None set"
+            echo ""
+
+            echo "=========================================="
+            echo "Verification complete!"
+            echo "=========================================="
+            VERIFY_SCRIPT
+
+            chmod +x "${ARTIFACT_DIR}/verify.sh"
+
+            cat > "${ARTIFACT_DIR}/README.md" <<'README'
+            # Mesa Panfrost Build for ARM64
+
+            ## Installation
+
+            ### Quick Install (Auto-detect driver):
+
+            \`\`\`bash
+            wget https://github.com/YOUR_USERNAME/YOUR_REPO/releases/download/v1.0.0/mesa-26.0.0-ubuntu24.04-aarch64.tar.gz
+            ./install-mesa.sh mesa-26.0.0-ubuntu24.04-aarch64.tar.gz
+            \`\`\`
+
+            ### Manual Driver Selection:
+
+            \`\`\`bash
+            ./install-mesa.sh mesa-26.0.0-ubuntu24.04-aarch64.tar.gz panfrost
+            \`\`\`
+
+            Or for Mali-DP (legacy):
+
+            \`\`\`bash
+            ./install-mesa.sh mesa-26.0.0-ubuntu24.04-aarch64.tar.gz mali_dp
+            \`\`\`
+
+            ## Environment Variables
+
+            ### Panfrost (DRM/KMS):
+            \`\`\`bash
+            export MESA_LOADER_DRIVER_OVERRIDE=panfrost
+            export PAN_MESA_DEBUG=gl3
+            \`\`\`
+
+            ### Mali-DP (Legacy /dev/mali0):
+            \`\`\`bash
+            export MESA_LOADER_DRIVER_OVERRIDE=mali_dp
+            \`\`\`
+
+            ## Testing
+
+            \`\`\`bash
+            ./verify.sh
+            \`\`\`
+
+            Or manually:
+
+            \`\`\`bash
+            glxinfo | grep "OpenGL renderer"
+            glmark2
+            \`\`\`
+
+            ## Troubleshooting
+
+            ### Panfrost not working:
+            - Check: \`ls /dev/dri/\` (should have card0, renderD128)
+            - Kernel must have \`CONFIG_DRM_PANFROST=y\`
+            - Try Mali-DP instead: \`export MESA_LOADER_DRIVER_OVERRIDE=mali_dp\`
+
+            ### Mali-DP not working:
+            - Check: \`ls /dev/mali0\` (should exist)
+            - Kernel must have \`CONFIG_MALI_MIDGARD=y\`
+            - Permissions: \`chmod 666 /dev/mali0\`
+
+            ### Falls back to llvmpipe:
+            - Check environment variables are set
+            - Check DRI driver files: \`ls /usr/lib/aarch64-linux-gnu/dri/\`
+            - Check library links: \`ldconfig -p | grep -i mesa\`
+
+            ### Performance issues:
+            - Verify correct driver is loaded (not llvmpipe)
+            - Check thermal throttling: \`dmesg | grep -i thermal\`
+            - Try optimization level 2 instead of 3
+
+            ## Rollback
+
+            \`\`\`bash
+            cp /tmp/mesa-backup/* /usr/lib/aarch64-linux-gnu/
+            ldconfig
+            \`\`\`
+
+            ## Build Information
+
+            - Mesa Version: $(date +%Y.%m.%d)
+            - Target: ARM64 (aarch64)
+            - Distribution: Ubuntu 24.04
+            - Built with: GitHub Actions (QEMU ARM64)
+            README
+
+            ls -lh "${ARTIFACT_DIR}/"
+            echo ""
+            echo "Build completed successfully!"
+            echo "Artifact directory: ${ARTIFACT_DIR}"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: mesa-${{ inputs.mesa_version || '26.0.0' }}-ubuntu24.04-aarch64
+          path: artifacts/
+          retention-days: 90
+
+      - name: Create Release (on tags only)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: artifacts/*.tar.gz,artifacts/*.sh,artifacts/*.md
+          draft: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
