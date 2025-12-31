@@ -131,19 +131,17 @@ jobs:
             fi
 
             if [ "${ENABLE_MALI_DP}" = "true" ]; then
-              GALLIUM_DRIVERS="${GALLIUM_DRIVERS}swrast,"
+              GALLIUM_DRIVERS="${GALLIUM_DRIVERS}softpipe,"
             else
               GALLIUM_DRIVERS="${GALLIUM_DRIVERS}"
             fi
 
-            GALLIUM_DRIVERS="${GALLIUM_DRIVERS}zink,llvmpipe"
-
             if [ "${ENABLE_PANVK}" = "true" ]; then
-              VULKAN_DRIVERS="panvk"
+              VULKAN_DRIVERS=""
             else
               VULKAN_DRIVERS=""
             fi
-
+            
             echo "Gallium drivers: ${GALLIUM_DRIVERS}"
             echo "Vulkan drivers: ${VULKAN_DRIVERS}"
 
@@ -176,6 +174,7 @@ jobs:
               -Dgles2=enabled \
               -Dgles1=disabled \
               -Dglx=dri \
+              -Dshared-llvm=disabled \
               -Dbuildtype=release \
               -Doptimization=${OPTIMIZE_LEVEL} \
               --cross-file /tmp/mesa-cross.txt
