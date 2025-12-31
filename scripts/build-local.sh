@@ -6,7 +6,7 @@ echo "Local Mesa 25.3.2 Build Script for ARM64"
 echo "=========================================="
 echo ""
 
-MESA_VERSION="25.3.2"
+MESA_VERSION="24.3.4"
 BUILD_DIR="$HOME/mesa-build-$MESA_VERSION"
 SOURCE_DIR="$HOME/mesa-source"
 ARTIFACT_DIR="$HOME/mesa-artifacts"
@@ -37,7 +37,7 @@ sudo apt-get install -y \
   libxcb-dri2-0-dev libxcb-glx0-dev \
   libxcb-present-dev libxcb-xfixes0-dev libexpat1-dev \
   libudev-dev libxml2-dev libssl-dev \
-  libelf-dev libclc-20-dev libclang-20-dev
+  libelf-dev libclang-20-dev
 
 # Update Meson if needed (Mesa 25.3.2 requires >=1.4.0)
 echo ""
@@ -78,21 +78,20 @@ meson setup "$BUILD_DIR" \
   --sysconfdir=/etc \
   --libdir=/usr/lib/aarch64-linux-gnu \
   -Dplatforms=x11,wayland \
-  -Dgallium-drivers=panfrost,softpipe \
-  -Dvulkan-drivers= \
+  -Dgallium-drivers=panfrost \
   -Degl=enabled \
   -Dgles2=enabled \
   -Dgles1=disabled \
   -Dglx=dri \
-  -Dshared-llvm=disabled \
   -Dbuildtype=release \
-  -Doptimization=3
+  -Doptimization=3 \
+  --wrap-mode=nofallback
 
 # Build
 echo ""
 echo "Building Mesa with $JOBS parallel jobs..."
 echo "This will take 30-60 minutes on ARM64..."
-ninja -C "$BUILD_DIR" -j"$JOBS"
+ninja -C "$BUILD_DIR" -j"$JOBS" || exit 1
 
 # Create artifacts
 echo ""
@@ -100,8 +99,8 @@ echo "Creating package..."
 rm -rf "$ARTIFACT_DIR"
 mkdir -p "$ARTIFACT_DIR/mesa-$MESA_VERSION-ubuntu24.04-aarch64"
 
-DESTDIR="$ARTIFACT_DIR/mesa-$MESA_VERSION-ubuntu24.04-aarch64" \
-  ninja -C "$BUILD_DIR" install
+DESTDIR="$ARTIFACT_DIR/mesa-$MESA_VERSION-ubuntu24.04-aarch64"
+ninja -C "$BUILD_DIR" install || exit 1
 
 tar -czf "$ARTIFACT_DIR/mesa-$MESA_VERSION-ubuntu24.04-aarch64.tar.gz" \
   -C "$ARTIFACT_DIR/mesa-$MESA_VERSION-ubuntu24.04-aarch64" \
