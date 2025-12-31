@@ -85,7 +85,7 @@ meson setup "$BUILD_DIR" \
   -Dglx=dri \
   -Dbuildtype=release \
   -Doptimization=3 \
-  --wrap-mode=nofallback
+  -Dintel-clc=enabled
 
 # Build
 echo ""
