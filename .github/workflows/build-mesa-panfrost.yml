@@ -169,7 +169,7 @@ jobs:
               --prefix=/usr \
               --sysconfdir=/etc \
               --libdir=/usr/lib/aarch64-linux-gnu \
-              -Dplatforms=x11,wayland,surfaceless \
+              -Dplatforms=x11,wayland \
               -Dgallium-drivers=${GALLIUM_DRIVERS%,} \
               -Dvulkan-drivers=${VULKAN_DRIVERS} \
               -Degl=enabled \
