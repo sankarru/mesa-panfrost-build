@@ -60,6 +60,8 @@ jobs:
       - name: Build on ARM64
         id: build
         uses: uraimo/run-on-arch-action@v3
+        env:
+          RUN_ON_ARCH_DISABLE_CACHE: true
         with:
           arch: aarch64
           distro: ubuntu24.04
