@@ -83,12 +83,12 @@ jobs:
               libx11-xcb-dev libxcb-keysyms1-dev libxkbcommon-dev \
               libxshmfence-dev libdrm-dev libxrandr-dev libxinerama-dev \
               libxcursor-dev libxfixes-dev libxi-dev libxext-dev \
-              libxv-dev libxvm-dev libgbm-dev libwayland-dev \
+              libxv-dev libgbm-dev libwayland-dev \
               libegl1-mesa-dev libgles2-mesa-dev libgl1-mesa-dev \
               libvulkan-dev glslang-tools spirv-tools pkg-config \
-              flex bison libwayland-protocols-dev wayland-protocols \
-              libx11-dev libxext-dev libxxf86vm-dev libxfixes-dev \
-              libxv-dev libxcb-dri2-0-dev libxcb-glx0-dev \
+              flex bison wayland-protocols \
+              libx11-dev libxext-dev libxxf86vm-dev \
+              libxcb-dri2-0-dev libxcb-glx0-dev \
               libxcb-present-dev libxcb-xfixes0-dev libexpat1-dev \
               libudev-dev libxml2-dev libssl-dev
 
