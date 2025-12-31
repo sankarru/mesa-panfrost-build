@@ -188,7 +188,7 @@ jobs:
               -C "${ARTIFACT_DIR}/mesa-${MESA_VERSION}-ubuntu24.04-aarch64" \
               usr
 
-            cat > "${ARTIFACT_DIR}/install-mesa.sh" <<'INSTALL_SCRIPT'
+            cat > "${ARTIFACT_DIR}/install-mesa.sh" <<INSTALL_SCRIPT
             #!/bin/bash
             set -e
 
