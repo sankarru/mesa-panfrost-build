@@ -92,7 +92,7 @@ jobs:
               libxcb-present-dev libxcb-xfixes0-dev libexpat1-dev \
               libudev-dev libxml2-dev libssl-dev
 
-            python3 -m pip install --break-system-packages mako jinja2 ply pyyaml markdown
+            python3 -m pip install --break-system-packages mako jinja2 ply pyyaml markdown "meson>=1.4.0"
 
           run: |
             set -e
