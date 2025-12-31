@@ -45,7 +45,7 @@ gh workflow run build-mesa-panfrost.yml
 gh workflow run build-mesa-panfrost.yml
 
 # Build with custom version
-gh workflow run build-mesa-panfrost.yml -f mesa_version=25.3.4
+gh workflow run build-mesa-panfrost.yml -f mesa_version=25.3.2
 
 # Build with balanced optimization
 gh workflow run build-mesa-panfrost.yml -f optimize_level=2

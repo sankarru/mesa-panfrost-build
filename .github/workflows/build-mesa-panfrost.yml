@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       mesa_version:
-        description: 'Mesa version to build (e.g., 26.0.0, 25.3.4)'
+        description: 'Mesa version to build (e.g., 25.3.2, 25.3.1)'
         required: false
-        default: '26.0.0'
+        default: '25.3.2'
         type: string
       enable_panfrost:
         description: 'Build Panfrost driver (requires DRM/KMS)'
@@ -42,7 +42,7 @@ on:
 
 jobs:
   build:
-    name: Build Mesa ${{ inputs.mesa_version || '26.0.0' }} for ARM64
+    name: Build Mesa ${{ inputs.mesa_version || '25.3.2' }} for ARM64
     runs-on: ubuntu-latest
 
     steps:
@@ -97,7 +97,7 @@ jobs:
           run: |
             set -e
 
-            MESA_VERSION="${{ inputs.mesa_version || '26.0.0' }}"
+            MESA_VERSION="${{ inputs.mesa_version || '25.3.2' }}"
             ENABLE_PANFROST="${{ inputs.enable_panfrost || 'true' }}"
             ENABLE_MALI_DP="${{ inputs.enable_mali_dp || 'true' }}"
             ENABLE_PANVK="${{ inputs.enable_panvk || 'true' }}"
@@ -443,7 +443,7 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: mesa-${{ inputs.mesa_version || '26.0.0' }}-ubuntu24.04-aarch64
+          name: mesa-${{ inputs.mesa_version || '25.3.2' }}-ubuntu24.04-aarch64
           path: artifacts/
           retention-days: 90
 
